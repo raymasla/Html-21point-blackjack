@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blackjack 21點</title>
+    <style>
+        :root {
+            --felt-green: #35654d;
+            --card-width: 80px;
+            --card-height: 112px;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--felt-green);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        h1 { margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+
+        #game-container {
+            width: 90%;
+            max-width: 800px;
+            text-align: center;
+        }
+
+        .stats-panel {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            font-size: 1.2rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        /* 調整手牌區域以適應分牌 */
+        .hand-area {
+            min-height: 140px;
+            margin: 10px 0;
+            padding: 10px;
+            border: 2px dashed rgba(255,255,255,0.2);
+            border-radius: 10px;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            transition: border-color 0.3s;
+        }
+
+        /* 分牌時的容器 */
+        #player-split-container {
+            display: flex;
+            gap: 10px;
+            justify-content: space-between;
+            width: 100%;
+        }
+        
+        .split-hand {
+            flex: 1;
+            border: 2px dashed rgba(255,255,255,0.2);
+            border-radius: 10px;
+            padding: 10px;
+            min-height: 140px;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .active-hand {
+            border: 2px solid #f1c40f;
+            background-color: rgba(241, 196, 15, 0.1);
+            box-shadow: 0 0 15px rgba(241, 196, 15, 0.3);
+        }
+
+        .hand-label {
+            position: absolute;
+            top: -10px;
+            left: 10px;
+            background: var(--felt-green);
+            padding: 0 5px;
+            font-size: 0.9rem;
+            color: #ddd;
+            z-index: 2;
+        }
+
+        .card {
+            width: var(--card-width);
+            height: var(--card-height);
+            background-color: white;
+            border-radius: 8px;
+            color: black;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 5px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+            font-weight: bold;
+            font-size: 1.2rem;
+            position: relative;
+            opacity: 0; 
+            transform: translateY(-20px) scale(0.8);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            /* 防止卡片重疊太多時擠壓 */
+            flex-shrink: 0; 
+            margin-left: -40px; /* 讓牌稍微疊在一起 */
+        }
+        
+        .hand-area .card:first-child, .split-hand .card:first-child {
+            margin-left: 0;
+        }
+
+        .card.dealt {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        .card.red { color: #d40000; }
+        .card.black { color: #000; }
+
+        .card-top { align-self: flex-start; }
+        .card-center { 
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            font-size: 2rem; 
+        }
+        .card-bottom { align-self: flex-end; transform: rotate(180deg); }
+
+        .controls {
+            margin-top: 20px;
+            min-height: 80px;
+        }
+
+        /* 唯讀輸入框樣式 */
+        input[type="number"] {
+            padding: 10px;
+            border-radius: 5px;
+            border: none;
+            width: 120px;
+            text-align: center;
+            font-size: 1.1rem;
+            font-weight: bold;
+            background-color: #eee;
+            color: #333;
+        }
+        
+        /* 讓輸入框看起來不能點 */
+        input[readonly] {
+            cursor: default;
+            background-color: #e0e0e0;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 1rem;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: #f1c40f;
+            color: #333;
+            font-weight: bold;
+            transition: transform 0.1s, background-color 0.2s;
+            margin: 5px;
+        }
+
+        button:hover { background-color: #f39c12; }
+        button:active { transform: scale(0.95); }
+        /* Disabled 樣式 */
+        button:disabled { 
+            background-color: #95a5a6 !important; 
+            cursor: not-allowed; 
+            opacity: 0.6; 
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        .btn-hit { background-color: #2ecc71; color: white; }
+        .btn-stand { background-color: #e74c3c; color: white; }
+        .btn-clear { background-color: #95a5a6; color: white; }
+        .btn-double { background-color: #9b59b6; color: white; }
+        .btn-split { background-color: #3498db; color: white; }
+        .btn-confirm { background-color: #f1c40f; font-size: 1.1rem; box-shadow: 0 4px 0 #d35400; }
+        .btn-confirm:active { box-shadow: 0 0 0 #d35400; transform: translateY(4px); }
+
+        #chip-container {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 15px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .chip {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            border: 4px dashed rgba(255,255,255,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 0.75rem;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5), inset 0 0 10px rgba(0,0,0,0.3);
+            transition: transform 0.1s;
+            user-select: none;
+            color: white;
+            text-shadow: 1px 1px 2px black;
+            position: relative;
+        }
+
+        .chip::after {
+            content: '';
+            position: absolute;
+            width: 36px;
+            height: 36px;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        .chip:hover { transform: translateY(-5px); }
+        .chip:active { transform: translateY(0) scale(0.95); }
+
+        #message-area {
+            height: 30px;
+            margin-top: 10px;
+            font-size: 1.2rem;
+            color: #f1c40f;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px black;
+        }
+
+        #bet-input-group {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .hidden { display: none !important; }
+        
+        .result-tag {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-15deg);
+            padding: 5px 15px;
+            border: 3px solid white;
+            font-size: 1.5rem;
+            font-weight: 900;
+            text-shadow: 2px 2px 0 black;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            z-index: 10;
+            opacity: 0;
+            animation: stamp 0.3s forwards;
+        }
+        
+        @keyframes stamp {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(3) rotate(-15deg); }
+            100% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-15deg); }
+        }
+
+        .tag-win { background-color: #2ecc71; color: white; border-color: #fff; }
+        .tag-lose { background-color: #e74c3c; color: white; border-color: #fff; }
+        .tag-push { background-color: #95a5a6; color: white; border-color: #fff; }
+        .tag-bj { background-color: #f1c40f; color: #d35400; border-color: #fff; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Blackjack 21點 PRO</h1>
+
+    <div id="game-container">
+        <div class="stats-panel">
+            <div>持有籌碼: <span id="bank-display">0</span></div>
+            <div>本局下注: <span id="current-bet-display">0</span></div>
+        </div>
+
+        <div class="hand-area" id="dealer-area">
+            <span class="hand-label">莊家 (<span id="dealer-score">0</span>)</span>
+            <div id="dealer-cards" style="display:flex; justify-content:center;"></div>
+        </div>
+
+        <div id="player-main-area">
+            <div class="hand-area" id="player-area">
+                <span class="hand-label">玩家 (<span id="player-score">0</span>)</span>
+                <div id="player-cards" style="display:flex; justify-content:center;"></div>
+            </div>
+        </div>
+
+        <div id="message-area">歡迎來到21點！</div>
+
+        <div class="controls">
+            <div id="setup-panel">
+                <input type="number" id="init-bank-input" placeholder="輸入初始籌碼" value="10000">
+                <button onclick="startGame()">開始遊戲</button>
+            </div>
+
+            <div id="bet-panel" class="hidden">
+                <div id="chip-container"></div>
+                <div id="bet-input-group">
+                    <button class="btn-clear" onclick="clearBet()">清除</button>
+                    <input type="number" id="bet-input" placeholder="點擊籌碼" readonly>
+                    <button class="btn-confirm" onclick="placeBet()">發牌</button>
+                </div>
+            </div>
+
+            <div id="action-panel" class="hidden">
+                <button class="btn-hit" onclick="playerHit()">要牌 (Hit)</button>
+                <button id="btn-double" class="btn-double hidden" onclick="playerDouble()">加倍 (Double)</button>
+                <button id="btn-split" class="btn-split hidden" onclick="playerSplit()">分牌 (Split)</button>
+                <button class="btn-stand" onclick="playerStand()">停牌 (Stand)</button>
+            </div>
+
+            <div id="restart-panel" class="hidden">
+                <button onclick="resetRound()">下一局</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 遊戲狀態變數
+        let bank = 0;
+        let dealerHand = [];
+        let playerHands = [];
+        let activeHandIndex = 0; 
+        
+        // 防止重複點擊的鎖
+        let isProcessing = false;
+
+        const possibleChips = [
+            50, 100, 500, 
+            1000, 5000, 10000, 
+            50000, 100000, 500000, 
+            1000000, 5000000, 10000000
+        ];
+
+        // HTML 元素參照
+        const bankDisplay = document.getElementById('bank-display');
+        const betDisplay = document.getElementById('current-bet-display');
+        const dealerCardsDiv = document.getElementById('dealer-cards');
+        const dealerScoreSpan = document.getElementById('dealer-score');
+        const messageArea = document.getElementById('message-area');
+        
+        const playerMainArea = document.getElementById('player-main-area'); 
+        
+        const setupPanel = document.getElementById('setup-panel');
+        const betPanel = document.getElementById('bet-panel');
+        const actionPanel = document.getElementById('action-panel');
+        const restartPanel = document.getElementById('restart-panel');
+        const betInput = document.getElementById('bet-input');
+        const chipContainer = document.getElementById('chip-container');
+        
+        const btnDouble = document.getElementById('btn-double');
+        const btnSplit = document.getElementById('btn-split');
+
+        // --- 核心邏輯 ---
+
+        function getRandomCard() {
+            const suits = ['♠', '♥', '♦', '♣'];
+            const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+            
+            const suit = suits[Math.floor(Math.random() * suits.length)];
+            const rankIndex = Math.floor(Math.random() * ranks.length);
+            const rank = ranks[rankIndex];
+            
+            // J, Q, K 都算 10 點
+            let value = rankIndex + 1;
+            if (value > 10) value = 10;
+            if (value === 1) value = 11;
+
+            return { suit, rank, value };
+        }
+
+        function calculateHand(hand) {
+            let total = hand.reduce((sum, card) => sum + card.value, 0);
+            let aces = hand.filter(card => card.rank === 'A').length;
+
+            while (total > 21 && aces > 0) {
+                total -= 10;
+                aces--;
+            }
+            return total;
+        }
+
+        // --- 介面操作 ---
+
+        function updateStatus(msg) {
+            messageArea.textContent = msg;
+        }
+
+        function createCardElement(card) {
+            const el = document.createElement('div');
+            el.className = `card ${['♥', '♦'].includes(card.suit) ? 'red' : 'black'}`;
+            el.innerHTML = `
+                <div class="card-top">${card.rank}</div>
+                <div class="card-center">${card.suit}</div>
+                <div class="card-bottom">${card.rank}</div>
+            `;
+            return el;
+        }
+
+        function renderHandContainer(container, hand, hideSecondCard = false) {
+            container.innerHTML = '';
+            
+            hand.forEach((card, index) => {
+                if (hideSecondCard && index === 1) {
+                    const backCard = document.createElement('div');
+                    backCard.className = 'card';
+                    backCard.style.background = '#2c3e50';
+                    backCard.style.backgroundImage = 'repeating-linear-gradient(45deg, #606dbc 0, #606dbc 10px, #465298 0, #465298 20px)';
+                    backCard.id = 'dealer-hidden-card';
+                    container.appendChild(backCard);
+                    setTimeout(() => backCard.classList.add('dealt'), 50 * index);
+                } else {
+                    const cardEl = createCardElement(card);
+                    container.appendChild(cardEl);
+                    setTimeout(() => cardEl.classList.add('dealt'), 50 * index);
+                }
+            });
+        }
+
+        function updateUI(hideDealer = true) {
+            // 更新莊家
+            renderHandContainer(dealerCardsDiv, dealerHand, hideDealer);
+            if (hideDealer) {
+                dealerScoreSpan.textContent = dealerHand.length > 0 ? dealerHand[0].value : 0;
+            } else {
+                dealerScoreSpan.textContent = calculateHand(dealerHand);
+            }
+
+            // 更新玩家 (根據是否分牌)
+            if (playerHands.length === 1) {
+                const pHand = playerHands[0];
+                const pContainer = document.getElementById('player-cards');
+                const pScore = document.getElementById('player-score');
+                
+                renderHandContainer(pContainer, pHand.cards);
+                pScore.textContent = calculateHand(pHand.cards);
+            } else {
+                playerHands.forEach((hand, idx) => {
+                    const container = document.getElementById(`split-hand-${idx}-cards`);
+                    const score = document.getElementById(`split-hand-${idx}-score`);
+                    const div = document.getElementById(`split-hand-${idx}`);
+                    
+                    if(container && score) {
+                        renderHandContainer(container, hand.cards);
+                        score.textContent = calculateHand(hand.cards);
+                    }
+                    
+                    if (div) {
+                        if (idx === activeHandIndex && !hand.finished) {
+                            div.classList.add('active-hand');
+                        } else {
+                            div.classList.remove('active-hand');
+                        }
+                    }
+                });
+            }
+            
+            let totalBet = playerHands.reduce((sum, h) => sum + h.bet, 0);
+            betDisplay.textContent = totalBet;
+        }
+
+        // --- 輔助：控制按鈕鎖定 ---
+        function toggleActionButtons(disabled) {
+            const btns = actionPanel.querySelectorAll('button');
+            btns.forEach(btn => {
+                btn.disabled = disabled;
+            });
+        }
+
+        // --- 籌碼邏輯 ---
+
+        function formatChipLabel(val) {
+            if (val >= 1000000) return (val / 1000000) + 'M';
+            if (val >= 1000) return (val / 1000) + 'K';
+            return val;
+        }
+
+        function getChipColor(val) {
+            if (val === 50) return { bg: '#c0392b', border: '#e74c3c' }; 
+            if (val === 100) return { bg: '#2980b9', border: '#3498db' }; 
+            if (val === 500) return { bg: '#27ae60', border: '#2ecc71' }; 
+            if (val === 1000) return { bg: '#2c3e50', border: '#34495e' }; 
+            if (val === 5000) return { bg: '#8e44ad', border: '#9b59b6' }; 
+            if (val === 10000) return { bg: '#d35400', border: '#e67e22' }; 
+            if (val >= 1000000) return { bg: '#f1c40f', border: '#f39c12', text: '#000' };
+            if (val >= 100000) return { bg: '#16a085', border: '#1abc9c' }; 
+            if (val >= 50000) return { bg: '#c0392b', border: '#e74c3c' }; 
+            return { bg: '#7f8c8d', border: '#95a5a6' }; 
+        }
+
+        function renderChips() {
+            chipContainer.innerHTML = '';
+            let availableChips = possibleChips.filter(val => val <= bank);
+            
+            if (availableChips.length > 6) {
+                const smallest = availableChips[0]; 
+                const largestGroup = availableChips.slice(-5);
+                if (!largestGroup.includes(smallest)) {
+                    availableChips = [smallest, ...largestGroup];
+                } else {
+                    availableChips = largestGroup;
+                }
+            }
+            if (availableChips.length === 0 && bank > 0) availableChips = [bank]; 
+
+            availableChips.forEach(val => {
+                const chip = document.createElement('div');
+                chip.className = 'chip';
+                const colors = getChipColor(val);
+                chip.style.backgroundColor = colors.bg;
+                chip.style.borderColor = colors.border;
+                if (colors.text) chip.style.color = colors.text;
+                chip.textContent = formatChipLabel(val);
+                chip.onclick = () => addChipBet(val);
+                chipContainer.appendChild(chip);
+            });
+        }
+
+        function addChipBet(amount) {
+            let currentInputVal = parseInt(betInput.value) || 0;
+            let newVal = currentInputVal + amount;
+
+            if (newVal > bank) {
+                newVal = bank;
+                updateStatus("已達最大下注金額 (All In)");
+            } else {
+                updateStatus("已增加下注: " + amount);
+            }
+            betInput.value = newVal;
+            betDisplay.textContent = newVal; 
+        }
+
+        function clearBet() {
+            betInput.value = '';
+            betDisplay.textContent = '0';
+            updateStatus("已清除下注");
+        }
+
+        // --- 遊戲流程 ---
+
+        function startGame() {
+            const initBank = parseInt(document.getElementById('init-bank-input').value);
+            if (isNaN(initBank) || initBank <= 0) {
+                alert("請輸入一開始金額");
+                return;
+            }
+            bank = initBank;
+            bankDisplay.textContent = bank;
+            setupPanel.classList.add('hidden');
+            resetRound();
+        }
+
+        function resetRound() {
+            if (bank <= 0) {
+                updateStatus("點擊 F5到台北地下街");
+                actionPanel.classList.add('hidden');
+                restartPanel.classList.add('hidden');
+                betPanel.classList.add('hidden');
+                return;
+            }
+
+            dealerHand = [];
+            playerHands = [];
+            activeHandIndex = 0;
+            isProcessing = false; // 重置鎖
+            
+            playerMainArea.innerHTML = `
+                <div class="hand-area" id="player-area">
+                    <span class="hand-label">玩家 (<span id="player-score">0</span>)</span>
+                    <div id="player-cards" style="display:flex; justify-content:center;"></div>
+                </div>
+            `;
+            dealerCardsDiv.innerHTML = '';
+            dealerScoreSpan.textContent = '0';
+            betDisplay.textContent = '0';
+            bankDisplay.textContent = bank;
+
+            btnDouble.classList.add('hidden');
+            btnSplit.classList.add('hidden');
+
+            updateStatus("請點擊籌碼下注");
+            
+            betPanel.classList.remove('hidden');
+            restartPanel.classList.add('hidden');
+            actionPanel.classList.add('hidden');
+            
+            // 解鎖按鈕以防萬一
+            toggleActionButtons(false);
+
+            betInput.value = '';
+            renderChips(); 
+        }
+
+        async function placeBet() {
+            if (isProcessing) return; // 防止重複點擊
+
+            const betAmount = parseInt(betInput.value);
+            if (isNaN(betAmount) || betAmount <= 0) {
+                updateStatus("請先點擊籌碼下注");
+                return;
+            }
+            if (betAmount > bank) {
+                updateStatus("籌碼不足！");
+                return;
+            }
+
+            isProcessing = true;
+            // 鎖定確認按鈕
+            document.querySelector('.btn-confirm').disabled = true;
+
+            playerHands = [{
+                cards: [],
+                bet: betAmount,
+                status: 'playing',
+                finished: false
+            }];
+
+            betPanel.classList.add('hidden');
+            updateStatus("發牌中...");
+
+            await dealInitialCards();
+            
+            isProcessing = false;
+            document.querySelector('.btn-confirm').disabled = false;
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function dealInitialCards() {
+            const currentHand = playerHands[0];
+
+            currentHand.cards.push(getRandomCard());
+            updateUI(true);
+            await sleep(400);
+
+            dealerHand.push(getRandomCard());
+            updateUI(true);
+            await sleep(400);
+
+            currentHand.cards.push(getRandomCard());
+            updateUI(true);
+            await sleep(400);
+
+            dealerHand.push(getRandomCard());
+            updateUI(true); 
+            await sleep(400);
+
+            if (calculateHand(currentHand.cards) === 21) {
+                updateStatus("Blackjack!");
+                showResultTag(document.getElementById('player-area'), "BLACKJACK!", "tag-bj");
+                bank += currentHand.bet * 1.5; 
+                currentHand.status = 'blackjack';
+                currentHand.finished = true;
+                bankDisplay.textContent = bank;
+                restartPanel.classList.remove('hidden');
+                return;
+            }
+
+            updateStatus("你的回合");
+            actionPanel.classList.remove('hidden');
+            toggleActionButtons(false); // 確保按鈕是可用的
+
+            if (currentHand.bet <= bank / 2) {
+                btnDouble.classList.remove('hidden');
+            } else {
+                btnDouble.classList.add('hidden');
+            }
+
+            // 修改：檢查點數 (value) 是否相同，而不是文字 (rank) 是否相同
+            // 這樣 10, J, Q, K 之間都可以互拆
+            if (currentHand.cards[0].value === currentHand.cards[1].value && currentHand.bet <= bank / 2) {
+                btnSplit.classList.remove('hidden');
+            } else {
+                btnSplit.classList.add('hidden');
+            }
+        }
+
+        // --- 玩家動作 ---
+
+        async function playerHit() {
+            if (isProcessing) return; // 鎖定
+            isProcessing = true;
+            toggleActionButtons(true); // 視覺上禁用按鈕
+
+            // 隱藏特殊按鈕
+            btnDouble.classList.add('hidden');
+            btnSplit.classList.add('hidden');
+
+            const handObj = playerHands[activeHandIndex];
+            handObj.cards.push(getRandomCard());
+            updateUI(true);
+            
+            // 等待動畫
+            await sleep(500);
+
+            const total = calculateHand(handObj.cards);
+            
+            if (handObj.cards.length === 5 && total <= 21) {
+                updateStatus("過五關！直接獲勝！");
+                const areaId = playerHands.length > 1 ? `split-hand-${activeHandIndex}` : `player-area`;
+                showResultTag(document.getElementById(areaId), "WIN!", "tag-win");
+                
+                handObj.status = 'charlie';
+                handObj.finished = true;
+                
+                checkNextHand();
+            } else if (total > 21) {
+                updateStatus("爆牌了 (Bust)！");
+                const areaId = playerHands.length > 1 ? `split-hand-${activeHandIndex}` : `player-area`;
+                showResultTag(document.getElementById(areaId), "BUST", "tag-lose");
+                
+                handObj.status = 'bust';
+                handObj.finished = true;
+                await sleep(1000);
+                checkNextHand();
+            } else {
+                // 如果還沒結束，解鎖按鈕繼續操作
+                isProcessing = false;
+                toggleActionButtons(false);
+            }
+        }
+
+        async function playerDouble() {
+            if (isProcessing) return;
+            isProcessing = true;
+            toggleActionButtons(true);
+
+            const handObj = playerHands[activeHandIndex];
+            
+            if (handObj.bet > bank / 2) {
+                updateStatus("資金不足無法加倍");
+                isProcessing = false;
+                toggleActionButtons(false);
+                return;
+            }
+
+            updateStatus("加倍下注！抽最後一張牌...");
+            handObj.bet *= 2; 
+            updateUI(true); 
+            
+            handObj.cards.push(getRandomCard());
+            updateUI(true);
+            
+            await sleep(1000); // 等待觀看結果
+
+            const total = calculateHand(handObj.cards);
+            const areaId = playerHands.length > 1 ? `split-hand-${activeHandIndex}` : `player-area`;
+
+            if (total > 21) {
+                updateStatus("加倍後爆牌！");
+                showResultTag(document.getElementById(areaId), "BUST", "tag-lose");
+                handObj.status = 'bust';
+            } else {
+                handObj.status = 'stand';
+            }
+            
+            handObj.finished = true;
+            checkNextHand(); 
+        }
+
+        async function playerStand() {
+            if (isProcessing) return;
+            isProcessing = true;
+            toggleActionButtons(true);
+
+            const handObj = playerHands[activeHandIndex];
+            handObj.status = 'stand';
+            handObj.finished = true;
+            updateStatus("停牌。");
+            
+            await sleep(300); 
+            checkNextHand();
+        }
+
+        async function playerSplit() {
+            if (isProcessing) return;
+            isProcessing = true;
+            toggleActionButtons(true);
+
+            const originalHand = playerHands[0];
+            const splitBet = originalHand.bet;
+
+            if (splitBet > bank / 2) {
+                updateStatus("資金不足無法分牌");
+                isProcessing = false;
+                toggleActionButtons(false);
+                return;
+            }
+            
+            updateStatus("執行分牌！");
+
+            btnSplit.classList.add('hidden');
+            btnDouble.classList.add('hidden');
+
+            const card1 = originalHand.cards[0];
+            const card2 = originalHand.cards[1];
+
+            playerHands = [
+                { cards: [card1], bet: splitBet, status: 'playing', finished: false },
+                { cards: [card2], bet: splitBet, status: 'playing', finished: false }
+            ];
+
+            playerMainArea.innerHTML = `
+                <div id="player-split-container">
+                    <div class="split-hand" id="split-hand-0">
+                        <span class="hand-label">手牌 1 (<span id="split-hand-0-score">0</span>)</span>
+                        <div id="split-hand-0-cards" style="display:flex; justify-content:center;"></div>
+                    </div>
+                    <div class="split-hand" id="split-hand-1">
+                        <span class="hand-label">手牌 2 (<span id="split-hand-1-score">0</span>)</span>
+                        <div id="split-hand-1-cards" style="display:flex; justify-content:center;"></div>
+                    </div>
+                </div>
+            `;
+
+            playerHands[0].cards.push(getRandomCard());
+            playerHands[1].cards.push(getRandomCard());
+
+            activeHandIndex = 0;
+            updateUI(true);
+            updateStatus("正在操作手牌 1");
+            await sleep(800); 
+
+            if (playerHands[0].bet <= bank / 2) {
+                btnDouble.classList.remove('hidden');
+            }
+            
+            // 解鎖繼續
+            isProcessing = false;
+            toggleActionButtons(false);
+        }
+
+        function checkNextHand() {
+            actionPanel.classList.add('hidden');
+
+            if (activeHandIndex < playerHands.length - 1) {
+                activeHandIndex++;
+                updateStatus("正在操作手牌 " + (activeHandIndex + 1));
+                updateUI(true); 
+                actionPanel.classList.remove('hidden');
+                
+                // 重置下一手的狀態
+                const currentHand = playerHands[activeHandIndex];
+                if (currentHand.bet <= bank / 2) {
+                    btnDouble.classList.remove('hidden');
+                } else {
+                    btnDouble.classList.add('hidden');
+                }
+                btnSplit.classList.add('hidden'); 
+                
+                // 解鎖，讓玩家可以操作下一手
+                isProcessing = false;
+                toggleActionButtons(false);
+
+            } else {
+                const needsDealer = playerHands.some(h => h.status === 'stand');
+                if (needsDealer) {
+                    dealerTurn();
+                } else {
+                    endRound();
+                }
+            }
+        }
+
+        async function dealerTurn() {
+            updateStatus("莊家回合...");
+            updateUI(false); 
+            await sleep(1000);
+
+            while (calculateHand(dealerHand) < 17) {
+                dealerHand.push(getRandomCard());
+                updateUI(false);
+                await sleep(1000);
+            }
+            endRound();
+        }
+
+        function endRound() {
+            actionPanel.classList.add('hidden');
+            const dealerTotal = calculateHand(dealerHand);
+            
+            playerHands.forEach((hand, idx) => {
+                if (hand.status === 'blackjack') return;
+                if (hand.status === 'charlie') {
+                    bank += hand.bet; 
+                    return;
+                }
+                if (hand.status === 'bust') {
+                    bank -= hand.bet;
+                    return;
+                }
+
+                const playerTotal = calculateHand(hand.cards);
+                const areaId = playerHands.length > 1 ? `split-hand-${idx}` : `player-area`;
+                const areaEl = document.getElementById(areaId);
+
+                if (dealerTotal > 21) {
+                    showResultTag(areaEl, "WIN!", "tag-win");
+                    bank += hand.bet;
+                } else if (playerTotal > dealerTotal) {
+                    showResultTag(areaEl, "WIN!", "tag-win");
+                    bank += hand.bet;
+                } else if (playerTotal < dealerTotal) {
+                    showResultTag(areaEl, "LOSE", "tag-lose");
+                    bank -= hand.bet;
+                } else {
+                    showResultTag(areaEl, "PUSH", "tag-push");
+                }
+            });
+
+            bankDisplay.textContent = bank;
+            updateStatus("本局結束");
+            restartPanel.classList.remove('hidden');
+        }
+
+        function showResultTag(container, text, className) {
+            const old = container.querySelector('.result-tag');
+            if(old) old.remove();
+
+            const tag = document.createElement('div');
+            tag.className = `result-tag ${className}`;
+            tag.innerText = text;
+            container.appendChild(tag);
+        }
+
+    </script>
+</body>
+</html>
