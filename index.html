@@ -282,6 +282,41 @@
         .tag-push { background-color: #95a5a6; color: white; border-color: #fff; }
         .tag-bj { background-color: #f1c40f; color: #d35400; border-color: #fff; }
 
+        /* 洗牌動畫 */
+        #shuffle-animation {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            gap: 8px;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .shuffle-card {
+            width: var(--card-width);
+            height: var(--card-height);
+            border-radius: 8px;
+            background: #2c3e50;
+            background-image: repeating-linear-gradient(45deg, #606dbc 0, #606dbc 10px, #465298 0, #465298 20px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+            animation: shuffle-move 0.6s infinite alternate;
+        }
+
+        .shuffle-card:nth-child(2) {
+            animation-delay: 0.1s;
+        }
+
+        .shuffle-card:nth-child(3) {
+            animation-delay: 0.2s;
+        }
+
+        @keyframes shuffle-move {
+            0% { transform: translateX(-8px) rotate(-5deg); }
+            100% { transform: translateX(8px) rotate(5deg); }
+        }
+
     </style>
 </head>
 <body>
@@ -297,6 +332,11 @@
         <div class="hand-area" id="dealer-area">
             <span class="hand-label">莊家 (<span id="dealer-score">0</span>)</span>
             <div id="dealer-cards" style="display:flex; justify-content:center;"></div>
+            <div id="shuffle-animation" class="hidden">
+                <div class="shuffle-card"></div>
+                <div class="shuffle-card"></div>
+                <div class="shuffle-card"></div>
+            </div>
         </div>
 
         <div id="player-main-area">
@@ -342,9 +382,47 @@
         let dealerHand = [];
         let playerHands = [];
         let activeHandIndex = 0; 
+        let deck = [];
         
         // 防止重複點擊的鎖
         let isProcessing = false;
+
+        // 牌庫相關：建立、洗牌、抽牌（不重複出現）
+        function createDeck() {
+            const suits = ['♠', '♥', '♦', '♣'];
+            const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+            const newDeck = [];
+
+            for (const suit of suits) {
+                for (let i = 0; i < ranks.length; i++) {
+                    const rank = ranks[i];
+                    let value = i + 1;
+                    if (value > 10) value = 10;
+                    if (value === 1) value = 11; // A 當 11，之後由 calculateHand 調整
+                    newDeck.push({ suit, rank, value });
+                }
+            }
+            return newDeck;
+        }
+
+        function shuffleDeck(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function initDeck() {
+            deck = createDeck();
+            shuffleDeck(deck);
+        }
+
+        function drawCard() {
+            if (deck.length === 0) {
+                initDeck();
+            }
+            return deck.pop();
+        }
 
         const possibleChips = [
             50, 100, 500, 
@@ -359,6 +437,7 @@
         const dealerCardsDiv = document.getElementById('dealer-cards');
         const dealerScoreSpan = document.getElementById('dealer-score');
         const messageArea = document.getElementById('message-area');
+        const shuffleAnimation = document.getElementById('shuffle-animation');
         
         const playerMainArea = document.getElementById('player-main-area'); 
         
@@ -373,22 +452,6 @@
         const btnSplit = document.getElementById('btn-split');
 
         // --- 核心邏輯 ---
-
-        function getRandomCard() {
-            const suits = ['♠', '♥', '♦', '♣'];
-            const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
-            
-            const suit = suits[Math.floor(Math.random() * suits.length)];
-            const rankIndex = Math.floor(Math.random() * ranks.length);
-            const rank = ranks[rankIndex];
-            
-            // J, Q, K 都算 10 點
-            let value = rankIndex + 1;
-            if (value > 10) value = 10;
-            if (value === 1) value = 11;
-
-            return { suit, rank, value };
-        }
 
         function calculateHand(hand) {
             let total = hand.reduce((sum, card) => sum + card.value, 0);
@@ -558,8 +621,8 @@
         }
 
         // --- 遊戲流程 ---
-
-        function startGame() {
+        
+        async function startGame() {
             const initBank = parseInt(document.getElementById('init-bank-input').value);
             if (isNaN(initBank) || initBank <= 0) {
                 alert("請輸入一開始金額");
@@ -568,6 +631,11 @@
             bank = initBank;
             bankDisplay.textContent = bank;
             setupPanel.classList.add('hidden');
+
+            // 建立牌庫並播放洗牌動畫
+            initDeck();
+            await playShuffleAnimation();
+
             resetRound();
         }
 
@@ -649,22 +717,30 @@
             return new Promise(resolve => setTimeout(resolve, ms));
         }
 
+        async function playShuffleAnimation() {
+            if (!shuffleAnimation) return;
+            shuffleAnimation.classList.remove('hidden');
+            updateStatus("莊家正在洗牌...");
+            await sleep(2000);
+            shuffleAnimation.classList.add('hidden');
+        }
+
         async function dealInitialCards() {
             const currentHand = playerHands[0];
 
-            currentHand.cards.push(getRandomCard());
+            currentHand.cards.push(drawCard());
             updateUI(true);
             await sleep(400);
 
-            dealerHand.push(getRandomCard());
+            dealerHand.push(drawCard());
             updateUI(true);
             await sleep(400);
 
-            currentHand.cards.push(getRandomCard());
+            currentHand.cards.push(drawCard());
             updateUI(true);
             await sleep(400);
 
-            dealerHand.push(getRandomCard());
+            dealerHand.push(drawCard());
             updateUI(true); 
             await sleep(400);
 
@@ -710,7 +786,7 @@
             btnSplit.classList.add('hidden');
 
             const handObj = playerHands[activeHandIndex];
-            handObj.cards.push(getRandomCard());
+            handObj.cards.push(drawCard());
             updateUI(true);
             
             // 等待動畫
@@ -761,7 +837,7 @@
             handObj.bet *= 2; 
             updateUI(true); 
             
-            handObj.cards.push(getRandomCard());
+            handObj.cards.push(drawCard());
             updateUI(true);
             
             await sleep(1000); // 等待觀看結果
@@ -836,8 +912,8 @@
                 </div>
             `;
 
-            playerHands[0].cards.push(getRandomCard());
-            playerHands[1].cards.push(getRandomCard());
+            playerHands[0].cards.push(drawCard());
+            playerHands[1].cards.push(drawCard());
 
             activeHandIndex = 0;
             updateUI(true);
@@ -891,7 +967,7 @@
             await sleep(1000);
 
             while (calculateHand(dealerHand) < 17) {
-                dealerHand.push(getRandomCard());
+                dealerHand.push(drawCard());
                 updateUI(false);
                 await sleep(1000);
             }
